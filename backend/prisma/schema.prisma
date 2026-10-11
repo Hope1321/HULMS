@@ -1,0 +1,657 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  INACTIVE
+}
+
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum RoleName {
+  ADMIN
+  DIRECTOR
+  LAB_TECHNICIAN
+  LECTURER
+  RESEARCHER
+  STUDENT
+}
+
+model User {
+  id              String     @id @default(uuid()) @db.Uuid
+  firstName       String
+  lastName        String
+  email           String     @unique
+  phone           String?
+  password        String
+  status          UserStatus @default(PENDING)
+  isEmailVerified Boolean    @default(false)
+
+  collegeId    String? @db.Uuid
+  departmentId String? @db.Uuid
+  laboratoryId String? @db.Uuid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  college    College?    @relation(fields: [collegeId], references: [id])
+  department Department? @relation(fields: [departmentId], references: [id])
+  laboratory Laboratory? @relation(fields: [laboratoryId], references: [id])
+
+  roles               UserRole[]
+  registrationRequest RegistrationRequest?
+  chemicalRequests    ChemicalRequest[]
+  equipmentRequests   EquipmentRequest[]  @relation("EquipmentRequests")
+  approvals           Approval[]           @relation("RequestApprover")
+  issuancesReceived   ChemicalIssuance[]   @relation("IssuedTo")
+  issuancesCreated    ChemicalIssuance[]   @relation("IssuedBy")
+  notifications       Notification[]
+  auditLogs           AuditLog[]
+
+  @@index([collegeId])
+  @@index([departmentId])
+  @@index([laboratoryId])
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        RoleName @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  roleId    String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+model RegistrationRequest {
+  id         String             @id @default(uuid()) @db.Uuid
+  userId     String             @unique @db.Uuid
+  userType   String             @default("STUDENT")
+  status     RegistrationStatus @default(PENDING)
+  reason     String?
+  reviewedBy String?            @db.Uuid
+  reviewedAt DateTime?
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("registration_requests")
+}
+
+model College {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  code        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  departments Department[]
+  users       User[]
+
+  @@map("colleges")
+}
+
+model Department {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  code        String
+  description String?
+  collegeId   String   @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  college      College      @relation(fields: [collegeId], references: [id], onDelete: Cascade)
+  laboratories Laboratory[]
+  users        User[]
+
+  @@unique([collegeId, code])
+  @@index([collegeId])
+  @@map("departments")
+}
+
+model Laboratory {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String
+  code         String   @unique
+  description  String?
+  location     String?
+  departmentId String   @db.Uuid
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  users      User[]
+  equipment  Equipment[]
+
+  @@index([departmentId])
+  @@map("laboratories")
+}
+
+enum HazardLevel {
+  LOW
+  MODERATE
+  HIGH
+  EXTREME
+}
+
+enum ChemicalStatus {
+  ACTIVE
+  INACTIVE
+  DISCONTINUED
+}
+
+enum BatchStatus {
+  AVAILABLE
+  LOW_STOCK
+  EXPIRED
+  DEPLETED
+}
+
+model ChemicalCategory {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  chemicals Chemical[]
+
+  @@map("chemical_categories")
+}
+
+model Unit {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  symbol      String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  chemicals    Chemical[]
+  batches      ChemicalBatch[]
+  requestItems RequestItem[]
+
+  @@map("units")
+}
+
+model Supplier {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  contactName String?
+  email       String?
+  phone       String?
+  address     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  chemicals Chemical[]
+
+  @@map("suppliers")
+}
+
+model StorageLocation {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  building    String?
+  room        String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  batches ChemicalBatch[]
+
+  @@map("storage_locations")
+}
+
+model Chemical {
+  id          String         @id @default(uuid()) @db.Uuid
+  name        String
+  casNumber   String?        @unique
+  formula     String?
+  description String?
+  hazardLevel HazardLevel
+  status      ChemicalStatus @default(ACTIVE)
+
+  categoryId String  @db.Uuid
+  unitId     String  @db.Uuid
+  supplierId String? @db.Uuid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  category ChemicalCategory @relation(fields: [categoryId], references: [id])
+  unit     Unit             @relation(fields: [unitId], references: [id])
+  supplier Supplier?        @relation(fields: [supplierId], references: [id])
+
+  batches      ChemicalBatch[]
+  sdsDocuments SdsDocument[]
+  requestItems RequestItem[]
+  alerts       Alert[]
+
+  @@index([categoryId])
+  @@index([unitId])
+  @@index([supplierId])
+  @@index([hazardLevel])
+  @@map("chemicals")
+}
+
+model ChemicalBatch {
+  id           String      @id @default(uuid()) @db.Uuid
+  batchNumber  String
+  quantity     Decimal     @db.Decimal(12, 3)
+  minimumStock Decimal     @db.Decimal(12, 3)
+  purchaseDate DateTime?
+  expiryDate   DateTime?
+  status       BatchStatus @default(AVAILABLE)
+
+  chemicalId        String @db.Uuid
+  unitId            String @db.Uuid
+  storageLocationId String @db.Uuid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  chemical        Chemical           @relation(fields: [chemicalId], references: [id], onDelete: Cascade)
+  unit            Unit               @relation(fields: [unitId], references: [id])
+  storageLocation StorageLocation    @relation(fields: [storageLocationId], references: [id])
+  issuances       ChemicalIssuance[]
+  alerts          Alert[]
+
+  @@unique([chemicalId, batchNumber])
+  @@index([chemicalId])
+  @@index([storageLocationId])
+  @@index([expiryDate])
+  @@index([status])
+  @@map("chemical_batches")
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  COMPLETED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum IssuanceStatus {
+  PENDING
+  ISSUED
+  CANCELLED
+}
+
+model SdsDocument {
+  id          String   @id @default(uuid()) @db.Uuid
+  fileName    String
+  fileUrl     String
+  version     String?
+  description String?
+  uploadedAt  DateTime @default(now())
+
+  chemicalId String @db.Uuid
+
+  chemical Chemical @relation(fields: [chemicalId], references: [id], onDelete: Cascade)
+
+  @@index([chemicalId])
+  @@map("sds_documents")
+}
+
+model ChemicalRequest {
+  id            String        @id @default(uuid()) @db.Uuid
+  requestNumber String        @unique
+  purpose       String
+  requiredDate  DateTime?
+  status        RequestStatus @default(PENDING)
+  notes         String?
+
+  requestedById String @db.Uuid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  requestedBy User               @relation(fields: [requestedById], references: [id])
+  items       RequestItem[]
+  approvals   Approval[]
+  issuances   ChemicalIssuance[]
+
+  @@index([requestedById])
+  @@index([status])
+  @@index([createdAt])
+  @@map("chemical_requests")
+}
+
+model RequestItem {
+  id           String   @id @default(uuid()) @db.Uuid
+  requestedQty Decimal  @db.Decimal(12, 3)
+  approvedQty  Decimal? @db.Decimal(12, 3)
+  notes        String?
+
+  requestId  String @db.Uuid
+  chemicalId String @db.Uuid
+  unitId     String @db.Uuid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  request  ChemicalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  chemical Chemical        @relation(fields: [chemicalId], references: [id])
+  unit     Unit            @relation(fields: [unitId], references: [id])
+
+  @@index([requestId])
+  @@index([chemicalId])
+  @@map("request_items")
+}
+
+model Approval {
+  id       String         @id @default(uuid()) @db.Uuid
+  status   ApprovalStatus @default(PENDING)
+  comments String?
+
+  requestId    String @db.Uuid
+  approvedById String @db.Uuid
+
+  approvedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  request    ChemicalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  approvedBy User            @relation("RequestApprover", fields: [approvedById], references: [id])
+
+  @@index([requestId])
+  @@index([approvedById])
+  @@map("approvals")
+}
+
+model ChemicalIssuance {
+  id             String         @id @default(uuid()) @db.Uuid
+  issuanceNumber String         @unique
+  quantity       Decimal        @db.Decimal(12, 3)
+  status         IssuanceStatus @default(PENDING)
+  issuedAt       DateTime?
+  notes          String?
+
+  requestId  String @db.Uuid
+  batchId    String @db.Uuid
+  issuedToId String @db.Uuid
+  issuedById String @db.Uuid
+
+  createdAt DateTime @default(now())
+
+  request  ChemicalRequest @relation(fields: [requestId], references: [id])
+  batch    ChemicalBatch   @relation(fields: [batchId], references: [id])
+  issuedTo User            @relation("IssuedTo", fields: [issuedToId], references: [id])
+  issuedBy User            @relation("IssuedBy", fields: [issuedById], references: [id])
+
+  @@index([requestId])
+  @@index([batchId])
+  @@index([issuedToId])
+  @@index([issuedById])
+  @@index([issuedAt])
+  @@map("chemical_issuances")
+}
+
+enum NotificationType {
+  REQUEST_CREATED
+  REQUEST_APPROVED
+  REQUEST_REJECTED
+  CHEMICAL_ISSUED
+  LOW_STOCK
+  EXPIRING_CHEMICAL
+  SYSTEM
+}
+
+enum AlertType {
+  LOW_STOCK
+  EXPIRING_CHEMICAL
+  EXPIRED_CHEMICAL
+  HIGH_HAZARD
+}
+
+enum AlertStatus {
+  ACTIVE
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  APPROVE
+  REJECT
+  ISSUE
+}
+
+model Notification {
+  id      String           @id @default(uuid()) @db.Uuid
+  title   String
+  message String
+  type    NotificationType
+  isRead  Boolean          @default(false)
+
+  userId String @db.Uuid
+
+  createdAt DateTime  @default(now())
+  readAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model Alert {
+  id      String      @id @default(uuid()) @db.Uuid
+  type    AlertType
+  status  AlertStatus @default(ACTIVE)
+  title   String
+  message String?
+
+  chemicalId String? @db.Uuid
+  batchId    String? @db.Uuid
+
+  createdAt  DateTime  @default(now())
+  resolvedAt DateTime?
+
+  chemical Chemical?      @relation(fields: [chemicalId], references: [id])
+  batch    ChemicalBatch? @relation(fields: [batchId], references: [id])
+
+  @@index([chemicalId])
+  @@index([batchId])
+  @@index([status])
+  @@index([type])
+  @@map("alerts")
+}
+
+model AuditLog {
+  id          String      @id @default(uuid()) @db.Uuid
+  action      AuditAction
+  entity      String
+  entityId    String?
+  description String?
+  ipAddress   String?
+  userAgent   String?
+
+  userId String? @db.Uuid
+
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entity])
+  @@index([entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model ContactMessage {
+  id         String   @id @default(uuid()) @db.Uuid
+  name       String
+  email      String
+  department String?
+  subject    String
+  message    String
+  isRead     Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([isRead])
+  @@index([createdAt])
+  @@map("contact_messages")
+}
+
+// ── Equipment Models ──────────────────────────────────────────────────────
+
+enum EquipmentStatus {
+  AVAILABLE
+  IN_USE
+  UNDER_MAINTENANCE
+  RETIRED
+}
+
+enum EquipmentRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  RETURNED
+}
+
+enum MaintenanceType {
+  PREVENTIVE
+  CORRECTIVE
+  CALIBRATION
+  INSPECTION
+}
+
+enum MaintenanceStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model EquipmentCategory {
+  id          String      @id @default(uuid()) @db.Uuid
+  name        String      @unique
+  code        String      @unique
+  description String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  equipment   Equipment[]
+
+  @@map("equipment_categories")
+}
+
+model Equipment {
+  id           String          @id @default(uuid()) @db.Uuid
+  name         String
+  code         String          @unique
+  description  String?
+  serialNumber String?
+  model        String?
+  manufacturer String?
+  purchaseDate DateTime?
+  status       EquipmentStatus @default(AVAILABLE)
+  location     String?
+  categoryId   String          @db.Uuid
+  laboratoryId String?         @db.Uuid
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  category     EquipmentCategory       @relation(fields: [categoryId], references: [id])
+  laboratory   Laboratory?             @relation(fields: [laboratoryId], references: [id])
+  requests     EquipmentRequest[]
+  maintenances EquipmentMaintenance[]
+
+  @@index([categoryId])
+  @@index([status])
+  @@map("equipment")
+}
+
+model EquipmentRequest {
+  id              String                 @id @default(uuid()) @db.Uuid
+  requestNumber   String                 @unique
+  equipmentId     String                 @db.Uuid
+  requestedById   String                 @db.Uuid
+  purpose         String
+  requestedFrom   DateTime
+  requestedTo     DateTime
+  status          EquipmentRequestStatus @default(PENDING)
+  notes           String?
+  reviewedBy      String?                @db.Uuid
+  reviewedAt      DateTime?
+  reviewNotes     String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  equipment       Equipment              @relation(fields: [equipmentId], references: [id])
+  requestedBy     User                   @relation("EquipmentRequests", fields: [requestedById], references: [id])
+
+  @@index([equipmentId])
+  @@index([status])
+  @@map("equipment_requests")
+}
+
+model EquipmentMaintenance {
+  id              String            @id @default(uuid()) @db.Uuid
+  maintenanceNumber String          @unique
+  equipmentId     String            @db.Uuid
+  type            MaintenanceType
+  status          MaintenanceStatus @default(SCHEDULED)
+  scheduledDate   DateTime
+  completedDate   DateTime?
+  performedBy     String?
+  description     String
+  notes           String?
+  cost            Float?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  equipment       Equipment         @relation(fields: [equipmentId], references: [id])
+
+  @@index([equipmentId])
+  @@index([status])
+  @@map("equipment_maintenance")
+}

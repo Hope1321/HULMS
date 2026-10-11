@@ -1,0 +1,17 @@
+const DASHBOARD_ROLES = {
+  ADMIN: ["ADMIN"],
+
+  DIRECTOR: ["DIRECTOR"],
+
+  LAB_TECHNICIAN: ["LAB_TECHNICIAN"],
+
+  LECTURER: ["LECTURER"],
+
+  RESEARCHER: ["RESEARCHER"],
+
+  STUDENT: ["STUDENT"],
+};
+
+module.exports = {
+  DASHBOARD_ROLES,
+};
